@@ -1,0 +1,19 @@
+{
+  "@@locale": "ko",
+  "appTitle": "스도쿠",
+  "start": "시작",
+  "resume": "이어하기",
+  "selectDifficulty": "난이도 선택",
+  "easy": "쉬움",
+  "normal": "보통",
+  "hard": "어려움",
+  "clearTitle": "완료!",
+  "clearMessage": "스도쿠를 완성했습니다!",
+  "playAgain": "다시 하기",
+  "newGame": "새 게임",
+  "home": "홈으로",
+  "restart": "다시 시작",
+  "restartConfirm": "입력한 숫자가 모두 지워집니다. 계속할까요?",
+  "cancel": "취소",
+  "confirm": "확인"
+}

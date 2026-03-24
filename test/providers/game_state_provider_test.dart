@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sudoku/data/game_storage_service.dart';
-import 'package:sudoku/domain/models/cell_state.dart';
 import 'package:sudoku/domain/models/difficulty.dart';
 import 'package:sudoku/domain/models/game_state.dart';
 import 'package:sudoku/domain/models/puzzle_data.dart';

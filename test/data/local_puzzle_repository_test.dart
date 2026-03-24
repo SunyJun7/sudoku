@@ -49,7 +49,7 @@ class _MockAssetBundle extends CachingAssetBundle {
     final str = _assets[key];
     if (str == null) throw FlutterError('Asset not found: $key');
     final bytes = utf8.encode(str);
-    return ByteData.sublistView(bytes as Uint8List);
+    return ByteData.sublistView(Uint8List.fromList(bytes));
   }
 }
 

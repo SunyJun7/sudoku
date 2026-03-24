@@ -1,0 +1,19 @@
+{
+  "@@locale": "en",
+  "appTitle": "Sudoku",
+  "start": "Start",
+  "resume": "Resume",
+  "selectDifficulty": "Select Difficulty",
+  "easy": "Easy",
+  "normal": "Normal",
+  "hard": "Hard",
+  "clearTitle": "Complete!",
+  "clearMessage": "You solved the puzzle!",
+  "playAgain": "Play Again",
+  "newGame": "New Game",
+  "home": "Home",
+  "restart": "Restart",
+  "restartConfirm": "All your input will be cleared. Continue?",
+  "cancel": "Cancel",
+  "confirm": "OK"
+}
