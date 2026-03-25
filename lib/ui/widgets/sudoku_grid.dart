@@ -36,6 +36,7 @@ class SudokuGrid extends ConsumerWidget {
 
     final board = gameState.board;
     final selectedIndex = gameState.selectedIndex;
+    final lastPlacedIndex = gameState.lastPlacedIndex;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -82,6 +83,7 @@ class SudokuGrid extends ConsumerWidget {
                         cellSize: cellSize,
                         isSelected: isSelected,
                         isHighlighted: isHighlighted,
+                        isLastPlaced: lastPlacedIndex == index,
                         onTap: () => ref
                             .read(gameStateProvider.notifier)
                             .selectCell(index),

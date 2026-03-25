@@ -14,6 +14,9 @@ class AppColors {
   static const Color gridBorder = Color(0xFFBDBDBD);
   static const Color primaryButton = Color(0xFF1976D2);
   static const Color primaryButtonText = Color(0xFFFFFFFF);
+
+  /// 마지막으로 입력한 셀 강조 색상 (연한 초록)
+  static const Color lastPlacedColor = Color(0xFFC8E6C9);
 }
 
 class AppTextStyles {

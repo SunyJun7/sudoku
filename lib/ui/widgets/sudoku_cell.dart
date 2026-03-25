@@ -9,6 +9,8 @@ class SudokuCell extends StatelessWidget {
   final double cellSize;
   final bool isSelected;
   final bool isHighlighted;
+  /// 마지막으로 숫자를 입력한 셀 여부 — 연한 초록으로 강조
+  final bool isLastPlaced;
   final VoidCallback onTap;
 
   const SudokuCell({
@@ -18,12 +20,15 @@ class SudokuCell extends StatelessWidget {
     required this.cellSize,
     required this.isSelected,
     required this.isHighlighted,
+    this.isLastPlaced = false,
     required this.onTap,
   });
 
   Color _backgroundColor() {
     if (cell.isError) return AppColors.errorBackground;
     if (isSelected) return AppColors.selectedBackground;
+    // lastPlaced는 선택되지 않은 상태에서만 강조 표시
+    if (isLastPlaced) return AppColors.lastPlacedColor;
     if (isHighlighted) return AppColors.highlightBackground;
     return Colors.transparent;
   }

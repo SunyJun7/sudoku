@@ -8,6 +8,8 @@ class GameState {
   final int? selectedIndex;
   final Difficulty difficulty;
   final bool isComplete;
+  // UI 전용: 마지막으로 입력한 셀 인덱스 (직렬화 불필요)
+  final int? lastPlacedIndex;
 
   const GameState({
     required this.puzzle,
@@ -15,6 +17,7 @@ class GameState {
     required this.selectedIndex,
     required this.difficulty,
     required this.isComplete,
+    this.lastPlacedIndex,
   });
 
   GameState copyWith({
@@ -23,6 +26,7 @@ class GameState {
     Object? selectedIndex = _sentinel,
     Difficulty? difficulty,
     bool? isComplete,
+    Object? lastPlacedIndex = _sentinel,
   }) {
     return GameState(
       puzzle: puzzle ?? this.puzzle,
@@ -32,6 +36,9 @@ class GameState {
           : selectedIndex as int?,
       difficulty: difficulty ?? this.difficulty,
       isComplete: isComplete ?? this.isComplete,
+      lastPlacedIndex: lastPlacedIndex == _sentinel
+          ? this.lastPlacedIndex
+          : lastPlacedIndex as int?,
     );
   }
 

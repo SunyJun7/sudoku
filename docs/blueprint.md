@@ -610,3 +610,416 @@ Batch 5 (나머지 화면 + 다국어)
 **VERDICT: ✅ 승인 — Batch 1 구현 시작 가능**
 
 > 리뷰 일자: 2026-03-24 | 리뷰어: /plan-eng-review (gstack)
+
+---
+
+## 추가 기능 설계 (8개 신규 기능)
+
+> 작성일: 2026-03-25
+> 기존 Batch 1~5 구현 완료 상태에서 추가 기능을 설계한다.
+
+---
+
+### 기능 개요 및 분류
+
+| # | 기능 | 분류 | 트리거 |
+|---|------|------|--------|
+| 1 | 게임 시작 시 공지사항 팝업 | UI 다이얼로그 | 게임 화면 진입 시 1회 |
+| 2 | 1시간 경과 → "쉬시지요" 팝업 | 플레이 타이머 | 게임 시작 후 60분 |
+| 3 | 1시간 50분 경과 → 10분 후 종료 경고 | 플레이 타이머 | 게임 시작 후 110분 |
+| 4 | 2시간 경과 → 강제 종료 | 플레이 타이머 | 게임 시작 후 120분 |
+| 5 | 새벽 1:50 → 경고 팝업 | 시각 타이머 | 실제 시각 01:50 |
+| 6 | 새벽 2:00 → 강제 종료 | 시각 타이머 | 실제 시각 02:00 |
+| 7 | 2:00~8:00 앱 진입 시 차단 | 조건문 체크 | 앱 진입 시점 |
+| 8 | 마지막 입력 셀 색상 강조 | UI 상태 | 숫자 입력 시 |
+
+---
+
+### 각 기능별 구현 전략
+
+#### 기능 1: 게임 시작 시 공지사항 팝업
+
+- **위치:** `lib/ui/screens/game_screen.dart` (initState 또는 didChangeDependencies)
+- **방식:** GameScreen 진입 시 `WidgetsBinding.instance.addPostFrameCallback`에서 `showDialog` 호출
+- **팝업 내용:** 플레이 시간 제한 안내 (2시간), 새벽 시간 차단 안내 등
+- **다이얼로그 위젯:** `lib/ui/widgets/dialogs/notice_dialog.dart` (재사용 가능한 공지 다이얼로그)
+- **SharedPreferences 저장 불필요** — 매 게임 시작마다 표시
+
+#### 기능 2~4: 플레이 시간 타이머 (1h, 1h50m, 2h)
+
+- **서비스 클래스:** `lib/domain/services/play_timer_service.dart`
+  - 게임 화면 진입 시 시작, 이탈 시 정지/해제
+  - 3개의 `Timer`를 내부에서 관리 (60분, 110분, 120분)
+  - 각 타이머 만료 시 콜백 호출 (다이얼로그 표시 또는 앱 종료)
+  - `start()`, `stop()`, `dispose()` 메서드
+- **Provider:** `lib/providers/play_timer_provider.dart`
+  - Riverpod Provider로 서비스 인스턴스 제공
+  - GameScreen에서 ref.read로 접근
+- **다이얼로그:** `lib/ui/widgets/dialogs/rest_warning_dialog.dart` (기능 2: "쉬시지요")
+- **다이얼로그:** `lib/ui/widgets/dialogs/shutdown_warning_dialog.dart` (기능 3: "10분 후 종료")
+- **강제 종료:** 기능 4는 다이얼로그 없이 `await saveState(); exit(0);` 순서로 호출 (saveState 완료 후 종료)
+- **GameScreen 수정:** initState에서 타이머 시작, dispose에서 해제
+
+#### 기능 5~6: 새벽 시각 타이머 (1:50, 2:00)
+
+- **서비스 클래스:** `lib/domain/services/curfew_timer_service.dart`
+  - 현재 시각 기준으로 01:50, 02:00까지 남은 시간을 계산하여 Timer 설정
+  - 날짜 경계 처리: target 시각이 현재보다 이전이면 다음날로 계산 (예: 낮 13:00에 시작하면 익일 01:50을 기준으로 타이머 설정)
+  - `start()`, `dispose()` 메서드
+- **Provider:** `lib/providers/curfew_timer_provider.dart`
+- **다이얼로그:** `shutdown_warning_dialog.dart` 재사용 (메시지만 다름, 파라미터화)
+- **강제 종료:** 기능 6은 `await saveState(); exit(0);` 순서로 호출
+
+#### 기능 7: 새벽 2:00~8:00 앱 진입 차단
+
+- **유틸리티:** `lib/domain/services/curfew_checker.dart`
+  - `static bool isBlockedTime([DateTime? now])` — 현재 시각이 02:00~07:59인지 판단
+  - 테스트를 위해 DateTime 주입 가능
+- **차단 화면:** `lib/ui/screens/blocked_screen.dart`
+  - "현재 시간에는 플레이할 수 없습니다" 메시지
+  - 이용 가능 시간 안내 (08:00~02:00)
+  - `PopScope(canPop: false)` 적용하여 Android 뒤로가기로 차단 우회 방지
+- **체크 위치:** `lib/app.dart`의 `'/'` 라우트 빌더에서 단일 처리
+  - `'/'` 라우트 빌더에서 `CurfewChecker.isBlockedTime()`이 true이면 BlockedScreen 직접 반환
+  - `/blocked` 별도 라우트는 추가하지 않음 (혼선 방지)
+
+#### 기능 8: 마지막 입력 셀 색상 강조 (lastPlacedIndex)
+
+- **모델:** `game_state.dart` — lastPlacedIndex 필드 이미 존재
+- **Provider 수정:** `game_state_provider.dart`의 `placeNumber()` 메서드에서 `lastPlacedIndex: index` 설정
+- **테마 추가:** `app_theme.dart`에 `lastPlacedBackground` 색상 추가 (예: 연한 초록 `#C8E6C9`)
+- **UI 수정:**
+  - `sudoku_grid.dart`: lastPlacedIndex를 SudokuCell에 `isLastPlaced` 프로퍼티로 전달
+  - `sudoku_cell.dart`: `isLastPlaced`가 true이면 `lastPlacedBackground` 색상 적용
+
+---
+
+### 시스템 구조 변경
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   Presentation Layer                         │
+│                                                             │
+│  HomeScreen  DifficultyScreen  GameScreen  ClearScreen      │
+│  BlockedScreen (신규)                                        │
+│       │                            │                        │
+│       │                     ┌──────┴──────┐                 │
+│       │               NoticeDialog   RestWarningDialog      │
+│       │                          ShutdownWarningDialog      │
+├───────┼──────────────────────┼──────────────────────────────┤
+│       │   Application Layer (Riverpod)                      │
+│       │                      │                              │
+│  gameStateProvider    playTimerProvider (신규)               │
+│                       curfewTimerProvider (신규)             │
+├───────┼──────────────────────┼──────────────────────────────┤
+│       │   Domain Layer                                      │
+│       │                      │                              │
+│  기존 모델들           PlayTimerService (신규)               │
+│                       CurfewTimerService (신규)             │
+│                       CurfewChecker (신규)                  │
+├───────────────────────────────────────────────────────────── │
+│                   Data Layer (변경 없음)                      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 폴더 구조 변경 (신규 파일만 표시)
+
+```
+lib/
+├── domain/
+│   └── services/                        # 신규 디렉토리
+│       ├── play_timer_service.dart       # 플레이 시간 타이머 (60m, 110m, 120m)
+│       ├── curfew_timer_service.dart     # 새벽 시각 타이머 (01:50, 02:00)
+│       └── curfew_checker.dart           # 새벽 시간대 차단 판별
+│
+├── providers/
+│   ├── play_timer_provider.dart          # PlayTimerService Provider
+│   └── curfew_timer_provider.dart        # CurfewTimerService Provider
+│
+├── ui/
+│   ├── screens/
+│   │   └── blocked_screen.dart           # 새벽 시간 차단 화면
+│   └── widgets/
+│       └── dialogs/                      # 신규 디렉토리
+│           ├── notice_dialog.dart        # 공지사항 팝업
+│           ├── rest_warning_dialog.dart  # "쉬시지요" 팝업
+│           └── shutdown_warning_dialog.dart # 종료 경고 팝업
+
+test/
+├── domain/
+│   └── services/
+│       ├── play_timer_service_test.dart
+│       ├── curfew_timer_service_test.dart
+│       └── curfew_checker_test.dart
+└── ui/
+    └── screens/
+        └── blocked_screen_test.dart
+```
+
+---
+
+### 수정 파일 목록 (기존 파일)
+
+| 파일 | 수정 내용 |
+|------|----------|
+| `lib/providers/game_state_provider.dart` | `placeNumber()`에서 `lastPlacedIndex: index` 설정 |
+| `lib/ui/screens/game_screen.dart` | 타이머 서비스 시작/해제, 공지 팝업 표시 로직 추가 |
+| `lib/ui/widgets/sudoku_grid.dart` | `lastPlacedIndex`를 SudokuCell에 전달 |
+| `lib/ui/widgets/sudoku_cell.dart` | `isLastPlaced` 프로퍼티 추가, 배경색 분기 |
+| `lib/ui/theme/app_theme.dart` | `lastPlacedBackground` 색상 상수 추가 |
+| `lib/app.dart` | 새벽 시간 차단 분기 + `/blocked` 라우트 추가 |
+
+---
+
+### 데이터 모델 변경
+
+**PlayTimerService** (순수 Dart 클래스, Flutter Timer 사용)
+
+```dart
+class PlayTimerService {
+  Timer? _restTimer;       // 60분 후 발동
+  Timer? _warningTimer;    // 110분 후 발동
+  Timer? _shutdownTimer;   // 120분 후 발동
+
+  void start({
+    required VoidCallback onRestTime,        // 1시간 → "쉬시지요"
+    required VoidCallback onWarningTime,     // 1시간 50분 → 종료 경고
+    required VoidCallback onShutdownTime,    // 2시간 → 강제 종료
+  });
+
+  void stop();   // 모든 타이머 취소 (화면 이탈 시)
+  void dispose(); // stop과 동일, 명시적 해제
+}
+```
+
+**CurfewTimerService** (순수 Dart 클래스)
+
+```dart
+class CurfewTimerService {
+  Timer? _warningTimer;    // 01:50 도달 시 발동
+  Timer? _shutdownTimer;   // 02:00 도달 시 발동
+
+  void start({
+    required VoidCallback onWarningTime,     // 01:50 → 경고
+    required VoidCallback onShutdownTime,    // 02:00 → 강제 종료
+    DateTime? now,                           // 테스트용 시각 주입
+  });
+
+  void dispose();
+}
+```
+
+**CurfewChecker** (정적 유틸리티)
+
+```dart
+class CurfewChecker {
+  /// 02:00 <= now.hour < 08:00 이면 true
+  static bool isBlockedTime([DateTime? now]);
+}
+```
+
+---
+
+### 의존성 다이어그램
+
+```
+Batch A (도메인 서비스 + 차단 로직)
+    │
+    ├──► Batch B (UI: 다이얼로그 + 차단 화면 + lastPlaced 연결)
+    │        │
+    │        ▼
+    │    Batch C (통합: GameScreen/app.dart 수정 + Provider 연결)
+    │
+    (단방향: A → B → C)
+```
+
+---
+
+### 구현 배치
+
+#### Batch A: 도메인 서비스 계층 (타이머 + 차단 판별)
+
+- **목적:** 타이머 로직과 새벽 시간 차단 판별을 독립된 서비스 클래스로 구현
+- **파일 목록 (신규 6개):**
+  1. `lib/domain/services/play_timer_service.dart` — 플레이 시간 타이머 서비스
+  2. `lib/domain/services/curfew_timer_service.dart` — 새벽 시각 타이머 서비스
+  3. `lib/domain/services/curfew_checker.dart` — 새벽 시간대 차단 판별 유틸리티
+  4. `test/domain/services/play_timer_service_test.dart` — 플레이 타이머 유닛 테스트
+  5. `test/domain/services/curfew_timer_service_test.dart` — 새벽 타이머 유닛 테스트
+  6. `test/domain/services/curfew_checker_test.dart` — 차단 판별 유닛 테스트
+- **의존 배치:** 없음 (기존 Batch 1~5 완료 상태에서 독립 시작)
+- **완료 기준:**
+  - `flutter test test/domain/services/` 전체 통과
+  - PlayTimerService: start() 호출 후 지정 시간에 콜백 발동 확인 (fake timer 사용)
+  - CurfewTimerService: 현재 시각 기준 남은 시간 계산 정확성 확인
+  - CurfewChecker: 02:00~07:59 차단, 그 외 허용 확인
+
+---
+
+#### Batch B: UI 위젯 (다이얼로그 + 차단 화면 + lastPlaced 색상)
+
+- **목적:** 사용자에게 표시할 다이얼로그 3종, 차단 화면 1종 구현 및 lastPlacedIndex UI 연결
+- **파일 목록 (신규 4개 + 수정 4개 = 8개):**
+  1. `lib/ui/widgets/dialogs/notice_dialog.dart` — (신규) 공지사항 다이얼로그
+  2. `lib/ui/widgets/dialogs/rest_warning_dialog.dart` — (신규) "쉬시지요" 다이얼로그
+  3. `lib/ui/widgets/dialogs/shutdown_warning_dialog.dart` — (신규) 종료 경고 다이얼로그 (재사용: 1h50m 경고 + 새벽 1:50 경고)
+  4. `lib/ui/screens/blocked_screen.dart` — (신규) 새벽 시간 차단 화면
+  5. `lib/ui/theme/app_theme.dart` — (수정) `lastPlacedBackground` 색상 추가
+  6. `lib/ui/widgets/sudoku_cell.dart` — (수정) `isLastPlaced` 프로퍼티 추가, 배경색 분기
+  7. `lib/ui/widgets/sudoku_grid.dart` — (수정) `lastPlacedIndex`를 SudokuCell에 전달
+  8. `test/ui/screens/blocked_screen_test.dart` — (신규) 차단 화면 위젯 테스트
+- **의존 배치:** Batch A (CurfewChecker를 blocked_screen에서 import할 수 있으나, 실제 사용은 Batch C)
+- **완료 기준:**
+  - `flutter test test/ui/screens/blocked_screen_test.dart` 통과
+  - 각 다이얼로그 위젯이 독립적으로 showDialog로 표시 가능한 상태 (StatelessWidget)
+  - SudokuCell에 `isLastPlaced: true` 전달 시 연한 초록 배경 렌더링 확인
+  - `flutter analyze` 오류 없음
+
+---
+
+#### Batch C: 통합 — Provider 연결 + 화면 수정
+
+- **목적:** 서비스와 UI를 Provider로 연결하고, GameScreen/app.dart에 전체 로직 통합
+- **파일 목록 (신규 2개 + 수정 3개 = 5개):**
+  1. `lib/providers/play_timer_provider.dart` — (신규) PlayTimerService Provider
+  2. `lib/providers/curfew_timer_provider.dart` — (신규) CurfewTimerService Provider
+  3. `lib/ui/screens/game_screen.dart` — (수정) 타이머 시작/해제, 공지 팝업, 다이얼로그 콜백 연결
+  4. `lib/providers/game_state_provider.dart` — (수정) placeNumber()에서 lastPlacedIndex 설정
+  5. `lib/app.dart` — (수정) 새벽 시간 차단 분기 추가 (HomeScreen → BlockedScreen 조건부 전환)
+- **의존 배치:** Batch A, Batch B
+- **완료 기준:**
+  - `flutter analyze` 오류 없음
+  - `flutter run`으로 앱 실행 시:
+    - 게임 화면 진입 시 공지사항 팝업 표시됨
+    - 숫자 입력 시 마지막 입력 셀이 연한 초록으로 강조됨
+    - 타이머가 정상 등록되어 시간 경과 시 다이얼로그 표시됨 (수동 테스트)
+    - 새벽 2:00~8:00 사이 앱 실행 시 차단 화면 표시됨 (시스템 시각 변경으로 확인)
+    - 2시간 경과 또는 새벽 2:00 도달 시 앱 종료됨
+
+---
+
+### 세부 구현 명세
+
+#### GameScreen 수정 상세 (Batch C)
+
+```dart
+// _GameScreenState 수정 사항:
+
+// 1. initState에서:
+//    - PlayTimerService.start() 호출 (콜백으로 다이얼로그 표시/앱 종료)
+//    - CurfewTimerService.start() 호출 (콜백으로 경고/앱 종료)
+//    - addPostFrameCallback으로 NoticeDialog 표시
+
+// 2. dispose에서:
+//    - PlayTimerService.dispose()
+//    - CurfewTimerService.dispose()
+
+// 3. 강제 종료 방법:
+//    - import 'package:flutter/services.dart';
+//    - SystemNavigator.pop();  // Android
+//    - 또는 import 'dart:io'; exit(0);  // 즉시 종료 (Android/iOS 모두)
+```
+
+#### app.dart 수정 상세 (Batch C)
+
+```dart
+// routes 수정:
+routes: {
+  '/': (context) {
+    if (CurfewChecker.isBlockedTime()) {
+      return const BlockedScreen();
+    }
+    return const HomeScreen();
+  },
+  '/difficulty': (context) => const DifficultyScreen(),
+  '/game': (context) => const GameScreen(),
+  '/clear': (context) => const ClearScreen(),
+  '/blocked': (context) => const BlockedScreen(),
+},
+```
+
+#### placeNumber 수정 상세 (Batch C)
+
+```dart
+// game_state_provider.dart의 placeNumber()에서 state 업데이트 시:
+state = current.copyWith(
+  board: newBoard,
+  isComplete: isComplete,
+  lastPlacedIndex: index,   // 추가
+);
+```
+
+#### shutdown_warning_dialog 파라미터화 (Batch B)
+
+```dart
+class ShutdownWarningDialog extends StatelessWidget {
+  final String title;     // "종료 예정" 등
+  final String message;   // "10분 후 앱이 종료됩니다" 또는 "새벽 2시에 앱이 종료됩니다"
+  final VoidCallback? onConfirm;
+
+  // 기능 3 (1h50m): title="종료 예정", message="10분 후 앱이 종료됩니다. 게임을 저장해주세요."
+  // 기능 5 (01:50): title="종료 예정", message="새벽 2시에 앱이 종료됩니다."
+}
+```
+
+---
+
+### 주요 결정사항 및 트레이드오프 (추가 기능)
+
+#### 1. 타이머를 서비스 클래스로 분리
+
+**결정:** GameScreen에 직접 Timer를 두지 않고 PlayTimerService, CurfewTimerService로 분리.
+
+이유: GameScreen이 이미 WidgetsBindingObserver, 완료 감지 리스너 등 복잡한 상태를 관리하고 있다. 타이머 로직까지 추가하면 테스트와 유지보수가 어려워진다. 서비스 클래스로 분리하면 fake timer를 주입하여 유닛 테스트가 가능하고, 타이머 조건 변경(예: 2시간 → 3시간)이 한 곳에서 완결된다.
+
+트레이드오프: 파일 수가 늘어나지만, 각 파일의 책임이 명확해지는 이점이 더 크다.
+
+#### 2. 강제 종료 방식: SystemNavigator.pop() vs exit(0)
+
+**결정:** `exit(0)` 사용 (dart:io).
+
+이유: `SystemNavigator.pop()`은 iOS에서 동작하지 않는 경우가 있고, Android에서도 일부 상황에서 무시될 수 있다. `exit(0)`은 프로세스를 즉시 종료하므로 "강제 종료"라는 요구사항에 정확히 부합한다. 다만 iOS 앱 스토어 심사에서 프로그래밍적 앱 종료를 권장하지 않지만, 이 앱은 시니어 대상 제한적 배포이므로 문제없다.
+
+#### 3. 새벽 시간 차단 체크 위치
+
+**결정:** `app.dart`의 `'/'` 라우트에서 조건부 분기.
+
+대안으로 HomeScreen의 build()에서 체크하는 방법이 있으나, 라우트 레벨에서 차단하면 HomeScreen 로직이 깔끔하게 유지된다. 다만 다른 라우트(예: `/game`)로 직접 진입하는 경우는 차단하지 않는다 — 이는 게임 진행 중 새벽 2시가 되는 경우 CurfewTimerService가 처리하므로 문제없다.
+
+#### 4. 다이얼로그 재사용 전략
+
+**결정:** ShutdownWarningDialog를 기능 3(1h50m 경고)과 기능 5(01:50 경고) 양쪽에서 재사용.
+
+이유: 두 다이얼로그의 UI 구조가 동일하고(제목 + 메시지 + 확인 버튼), 메시지 내용만 다르다. 파라미터화하여 1개 위젯으로 충분하다.
+
+#### 5. 플레이 타이머 기준점
+
+**결정:** GameScreen 진입 시점(initState)부터 카운트 시작. 앱 백그라운드 시간은 포함한다.
+
+이유: Timer는 앱이 백그라운드에 있어도 시스템이 프로세스를 유지하는 한 동작한다. "2시간 제한"의 의도가 "장시간 앱 사용 방지"이므로 백그라운드 시간을 제외할 필요가 없다. 구현이 단순해지는 이점이 있다.
+
+---
+
+### 보안 위협 및 대응
+
+| 위협 | 대응 |
+|------|------|
+| 시스템 시각 조작으로 새벽 차단 우회 | 이 앱은 시니어 대상으로 시각 조작 가능성이 극히 낮음. 대응 비용 대비 실익이 없어 미대응 |
+| Timer 우회 (앱 재시작) | 앱을 재시작하면 타이머가 리셋됨. 의도적 우회보다는 "자연스러운 휴식"으로 간주 |
+| exit(0) 호출 시 데이터 유실 | 강제 종료 직전에 `saveState()` 호출하여 현재 게임 상태 저장 |
+
+---
+
+### 배치 검증 체크리스트 (추가 기능)
+
+| 검증 항목 | 결과 |
+|----------|------|
+| 전체 신규 파일 수 합계 = Batch A(6) + Batch B 신규(5) + Batch C 신규(2) = 13개 | PASS |
+| 전체 수정 파일 수 합계 = Batch B 수정(3) + Batch C 수정(3) = 6개 | PASS |
+| 배치당 파일 수: A=6, B=8, C=5 (모두 <= 8) | PASS |
+| Batch A는 의존 배치 없음 (독립 시작 가능) | PASS |
+| 의존성 단방향: A → B → C (역방향/순환 없음) | PASS |
+| 각 배치 완료 기준이 실행/컴파일 가능 상태로 기술됨 | PASS |
+| 각 배치에 해당 모듈의 테스트 파일 포함 (A: 3개, B: 1개, C: 수동 테스트) | PASS |
