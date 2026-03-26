@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'domain/services/curfew_checker.dart';
+import 'ui/screens/blocked_screen.dart';
 import 'ui/screens/clear_screen.dart';
 import 'ui/screens/difficulty_screen.dart';
 import 'ui/screens/game_screen.dart';
@@ -16,7 +18,9 @@ class SudokuApp extends StatelessWidget {
       theme: AppTheme.themeData,
       initialRoute: '/',
       routes: {
-        '/': (context) => const HomeScreen(),
+        '/': (context) => CurfewChecker.isBlockedTime()
+            ? const BlockedScreen()
+            : const HomeScreen(),
         '/difficulty': (context) => const DifficultyScreen(),
         '/game': (context) => const GameScreen(),
         '/clear': (context) => const ClearScreen(),

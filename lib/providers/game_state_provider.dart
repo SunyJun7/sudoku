@@ -81,7 +81,7 @@ class GameStateNotifier extends Notifier<GameState?> {
 
     final isComplete = SudokuValidator.isComplete(current.puzzle, newBoard);
 
-    state = current.copyWith(board: newBoard, isComplete: isComplete);
+    state = current.copyWith(board: newBoard, isComplete: isComplete, lastPlacedIndex: index);
 
     // 비동기 저장 (fire-and-forget)
     _saveStateAsync();

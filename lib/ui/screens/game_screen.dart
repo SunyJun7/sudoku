@@ -1,10 +1,17 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/models/difficulty.dart';
 import '../../providers/game_state_provider.dart';
+import '../../providers/play_timer_provider.dart';
+import '../../providers/curfew_timer_provider.dart';
 import '../widgets/game_control_bar.dart';
 import '../widgets/number_pad.dart';
 import '../widgets/sudoku_grid.dart';
+import '../widgets/dialogs/notice_dialog.dart';
+import '../widgets/dialogs/rest_warning_dialog.dart';
+import '../widgets/dialogs/shutdown_warning_dialog.dart';
 
 class GameScreen extends ConsumerStatefulWidget {
   const GameScreen({super.key});
@@ -19,12 +26,69 @@ class _GameScreenState extends ConsumerState<GameScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _showNoticeDialog();
+        _startTimers();
+      }
+    });
   }
 
   @override
   void dispose() {
+    ref.read(playTimerProvider).dispose();
+    ref.read(curfewTimerProvider).dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  void _showNoticeDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const NoticeDialog(),
+    );
+  }
+
+  void _startTimers() {
+    ref.read(playTimerProvider).start(
+      onRestTime: () {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (_) => const RestWarningDialog(),
+        );
+      },
+      onWarningTime: () {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (_) => const ShutdownWarningDialog(
+            message: '10분 후 게임이 자동으로 종료됩니다.',
+          ),
+        );
+      },
+      onShutdownTime: () async {
+        await ref.read(gameStateProvider.notifier).saveState();
+        exit(0);
+      },
+    );
+
+    ref.read(curfewTimerProvider).start(
+      onWarningTime: () {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (_) => const ShutdownWarningDialog(
+            message: '새벽 2시가 되면 게임이 종료됩니다.',
+          ),
+        );
+      },
+      onShutdownTime: () async {
+        await ref.read(gameStateProvider.notifier).saveState();
+        exit(0);
+      },
+    );
   }
 
   /// 앱이 백그라운드로 진입할 때 상태를 저장한다
